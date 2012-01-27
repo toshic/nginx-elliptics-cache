@@ -157,6 +157,7 @@ typedef struct {
 
 #if (NGX_HTTP_CACHE)
     ngx_shm_zone_t                  *cache;
+    ngx_uint_t                       cache_type;
 
     ngx_uint_t                       cache_min_uses;
     ngx_uint_t                       cache_use_stale;

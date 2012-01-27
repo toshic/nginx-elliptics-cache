@@ -209,6 +209,13 @@ static ngx_command_t ngx_http_uwsgi_commands[] = {
       0,
       NULL },
 
+    { ngx_string("uwsgi_cache_type"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_http_cache_set_type_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_uwsgi_loc_conf_t, upstream.cache_type),
+      NULL },
+
     { ngx_string("uwsgi_cache_key"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_http_uwsgi_cache_key,
@@ -218,9 +225,9 @@ static ngx_command_t ngx_http_uwsgi_commands[] = {
 
     { ngx_string("uwsgi_cache_path"),
       NGX_HTTP_MAIN_CONF|NGX_CONF_2MORE,
-      ngx_http_file_cache_set_slot,
-      0,
-      0,
+      ngx_http_cache_set_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_uwsgi_loc_conf_t, upstream),
       &ngx_http_uwsgi_module },
 
     { ngx_string("uwsgi_cache_bypass"),
@@ -239,7 +246,7 @@ static ngx_command_t ngx_http_uwsgi_commands[] = {
 
     { ngx_string("uwsgi_cache_valid"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
-      ngx_http_file_cache_valid_set_slot,
+      ngx_http_cache_valid_set_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_http_uwsgi_loc_conf_t, upstream.cache_valid),
       NULL },
@@ -1069,6 +1076,7 @@ ngx_http_uwsgi_create_loc_conf(ngx_conf_t *cf)
 
 #if (NGX_HTTP_CACHE)
     conf->upstream.cache = NGX_CONF_UNSET_PTR;
+    conf->upstream.cache_type = NGX_CONF_UNSET_UINT;
     conf->upstream.cache_min_uses = NGX_CONF_UNSET_UINT;
     conf->upstream.cache_bypass = NGX_CONF_UNSET_PTR;
     conf->upstream.no_cache = NGX_CONF_UNSET_PTR;
@@ -1271,6 +1279,9 @@ ngx_http_uwsgi_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
         return NGX_CONF_ERROR;
     }
+
+    ngx_conf_merge_uint_value(conf->upstream.cache_type,
+                              prev->upstream.cache_type, 1);
 
     ngx_conf_merge_uint_value(conf->upstream.cache_min_uses,
                               prev->upstream.cache_min_uses, 1);
