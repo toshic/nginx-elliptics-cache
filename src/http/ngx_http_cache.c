@@ -11,27 +11,42 @@
 
 
 void
-ngx_http_cache_init(ngx_http_cache_t *c, ngx_http_upstream_t *u){
-    ngx_http_file_cache_priv_t *p = c->cache_priv;
-    p->file_cache = u->conf->cache->data;
-    return;
+ngx_http_cache_init(ngx_http_cache_t *c, ngx_http_upstream_t *u)
+{
+    if (u->conf->cache_type == NGX_HTTP_CACHE_TYPE_FASTCGI) {
+        return ngx_http_fastcgi_cache_init(c, u);
+    }
+
+    return ngx_http_file_cache_init(c, u);
 }
 
 ngx_int_t
 ngx_http_cache_new(ngx_http_request_t *r, ngx_http_upstream_t *u)
 {
+    if (u->conf->cache_type == NGX_HTTP_CACHE_TYPE_FASTCGI) {
+        return ngx_http_fastcgi_cache_new(r);
+    }
+
     return ngx_http_file_cache_new(r);
 }
 
 ngx_int_t
 ngx_http_cache_create(ngx_http_request_t *r, ngx_http_upstream_t *u)
 {
+    if (u->conf->cache_type == NGX_HTTP_CACHE_TYPE_FASTCGI) {
+        return ngx_http_fastcgi_cache_create(r);
+    }
+
     return ngx_http_file_cache_create(r);
 }
 
 void
 ngx_http_cache_create_key(ngx_http_request_t *r, ngx_http_upstream_t *u)
 {
+    if (u->conf->cache_type == NGX_HTTP_CACHE_TYPE_FASTCGI) {
+        return ngx_http_fastcgi_cache_create_key(r);
+    }
+
     ngx_http_file_cache_create_key(r);
     return;
 }
@@ -39,30 +54,52 @@ ngx_http_cache_create_key(ngx_http_request_t *r, ngx_http_upstream_t *u)
 ngx_int_t
 ngx_http_cache_open(ngx_http_request_t *r, ngx_http_upstream_t *u)
 {
+    if (u->conf->cache_type == NGX_HTTP_CACHE_TYPE_FASTCGI) {
+        return ngx_http_fastcgi_cache_open(r);
+    }
+
     return ngx_http_file_cache_open(r);
 }
 
 void
 ngx_http_cache_set_header(ngx_http_request_t *r, u_char *buf, ngx_http_upstream_t *u)
 {
+    if (u->conf->cache_type == NGX_HTTP_CACHE_TYPE_FASTCGI) {
+        return ngx_http_fastcgi_cache_set_header(r, buf);
+    }
+
     return ngx_http_file_cache_set_header(r, buf);
 }
 
 void
 ngx_http_cache_update(ngx_http_request_t *r, ngx_temp_file_t *tf, ngx_http_upstream_t *u)
 {
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "http cache update: type:%d", u->conf->cache_type);
+    if (u->conf->cache_type == NGX_HTTP_CACHE_TYPE_FASTCGI) {
+        return ngx_http_fastcgi_cache_update(r, tf);
+    }
+
     return ngx_http_file_cache_update(r, tf);
 }
 
 ngx_int_t
 ngx_http_cache_send(ngx_http_request_t *r, ngx_http_upstream_t *u)
 {
+    if (u->conf->cache_type == NGX_HTTP_CACHE_TYPE_FASTCGI) {
+        return ngx_http_fastcgi_cache_send(r);
+    }
+
     return ngx_http_file_cache_send(r);
 }
 
 void
 ngx_http_cache_free(ngx_http_cache_t *c, ngx_temp_file_t *tf, ngx_http_upstream_t *u)
 {
+    if (u->conf->cache_type == NGX_HTTP_CACHE_TYPE_FASTCGI) {
+        return ngx_http_fastcgi_cache_free(c, tf);
+    }
+
     ngx_http_file_cache_free(c, tf);
     return;
 }
@@ -70,6 +107,10 @@ ngx_http_cache_free(ngx_http_cache_t *c, ngx_temp_file_t *tf, ngx_http_upstream_
 time_t
 ngx_http_cache_valid(ngx_array_t *cache_valid, ngx_uint_t status, ngx_http_upstream_t *u)
 {
+    if (u->conf->cache_type == NGX_HTTP_CACHE_TYPE_FASTCGI) {
+        return ngx_http_file_cache_valid(cache_valid, status);
+    }
+
     return ngx_http_file_cache_valid(cache_valid, status);
 }
 
@@ -81,6 +122,9 @@ ngx_http_cache_set_slot(ngx_conf_t *cf, ngx_command_t *cmd,
     ngx_http_upstream_conf_t *upstream;
 
     upstream = (ngx_http_upstream_conf_t *) (p + cmd->offset);
+    if (upstream->cache_type == NGX_HTTP_CACHE_TYPE_FASTCGI) {
+        return ngx_http_fastcgi_cache_set_slot(cf, cmd, conf);
+    }
 
     return ngx_http_file_cache_set_slot(cf, cmd, conf);
 }
@@ -103,9 +147,9 @@ ngx_http_cache_set_type_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     fp = (ngx_flag_t *) (p + cmd->offset);
 
-    if (*fp != NGX_CONF_UNSET) {
-        return "is duplicate";
-    }
+//    if (*fp != NGX_CONF_UNSET) {
+//        return "is duplicate";
+//    }
 
     value = cf->args->elts;
 

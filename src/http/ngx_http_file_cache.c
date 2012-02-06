@@ -57,8 +57,16 @@ ngx_str_t  ngx_http_cache_status[] = {
 static u_char  ngx_http_file_cache_key[] = { LF, 'K', 'E', 'Y', ':', ' ' };
 
 
+void
+ngx_http_file_cache_init(ngx_http_cache_t *c, ngx_http_upstream_t *u)
+{
+    ngx_http_file_cache_priv_t *p = c->cache_priv;
+    p->file_cache = u->conf->cache->data;
+    return;
+}
+
 static ngx_int_t
-ngx_http_file_cache_init(ngx_shm_zone_t *shm_zone, void *data)
+ngx_http_file_cache_shm_init(ngx_shm_zone_t *shm_zone, void *data)
 {
     ngx_http_file_cache_t  *ocache = data;
 
@@ -156,6 +164,11 @@ ngx_http_file_cache_new(ngx_http_request_t *r)
     }
 
     if (ngx_array_init(&c->keys, r->pool, 4, sizeof(ngx_str_t)) != NGX_OK) {
+        return NGX_ERROR;
+    }
+
+    c->cache_priv = ngx_pcalloc(r->pool, sizeof(ngx_http_file_cache_priv_t));
+    if (c == NULL) {
         return NGX_ERROR;
     }
 
@@ -1674,7 +1687,7 @@ ngx_http_file_cache_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
 
 
-    cache->shm_zone->init = ngx_http_file_cache_init;
+    cache->shm_zone->init = ngx_http_file_cache_shm_init;
     cache->shm_zone->data = cache;
 
     cache->inactive = inactive;

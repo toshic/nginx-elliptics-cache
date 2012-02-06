@@ -83,6 +83,7 @@ struct ngx_http_file_cache_s {
 };
 
 
+void ngx_http_file_cache_init(ngx_http_cache_t *c, ngx_http_upstream_t *u);
 ngx_int_t ngx_http_file_cache_new(ngx_http_request_t *r);
 ngx_int_t ngx_http_file_cache_create(ngx_http_request_t *r);
 void ngx_http_file_cache_create_key(ngx_http_request_t *r);

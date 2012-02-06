@@ -283,6 +283,7 @@ HTTP_DEPS="src/http/ngx_http.h \
            src/http/ngx_http_config.h \
            src/http/ngx_http_core_module.h \
            src/http/ngx_http_cache.h \
+           src/http/ngx_http_file_cache.h \
            src/http/ngx_http_variables.h \
            src/http/ngx_http_script.h \
            src/http/ngx_http_upstream.h \
@@ -317,7 +318,8 @@ HTTP_SRCS="$HTTP_SRCS src/http/ngx_http_busy_lock.c"
 HTTP_POSTPONE_FILTER_SRCS=src/http/ngx_http_postpone_filter_module.c
 
 HTTP_FILE_CACHE_SRCS="src/http/ngx_http_file_cache.c \
-           src/http/ngx_http_cache.c"
+           src/http/ngx_http_cache.c \
+           src/http/ngx_http_fastcgi_cache.c"
 
 
 HTTP_CHARSET_FILTER_MODULE=ngx_http_charset_filter_module

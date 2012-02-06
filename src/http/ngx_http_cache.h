@@ -12,6 +12,7 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 #include <ngx_http_file_cache.h>
+#include <ngx_http_fastcgi_cache.h>
 
 
 #define NGX_HTTP_CACHE_MISS          1
