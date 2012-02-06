@@ -1023,7 +1023,7 @@ ngx_http_scgi_create_loc_conf(ngx_conf_t *cf)
 
 #if (NGX_HTTP_CACHE)
     conf->upstream.cache = NGX_CONF_UNSET_PTR;
-    conf->upstream.cache_type = NGX_CONF_UNSET_UINT;
+    conf->upstream.cache_type = NGX_HTTP_CACHE_TYPE_FILE;
     conf->upstream.cache_min_uses = NGX_CONF_UNSET_UINT;
     conf->upstream.cache_bypass = NGX_CONF_UNSET_PTR;
     conf->upstream.no_cache = NGX_CONF_UNSET_PTR;
