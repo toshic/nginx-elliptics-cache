@@ -320,7 +320,7 @@ ngx_http_fastcgi_cache_create_key(ngx_http_request_t *r)
 
     priv->cache_url.len = len;
 
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "http fastcgi cache url : \"%V\"",
                    &priv->cache_url);
 
