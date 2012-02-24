@@ -46,23 +46,6 @@ ngx_http_fastcgi_cache_drop_output(ngx_http_request_t *r)
 
     pcl = &parent->out;
     for (cl = parent->out; cl; cl = cl->next) {
-
-#if (NGX_DEBUG)
-            ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
-                          "parent out buffer "
-                          "t:%d r:%d f:%d m:%d %p %p-%p %p %O-%O",
-                          cl->buf->temporary,
-                          cl->buf->recycled,
-                          cl->buf->in_file,
-                          cl->buf->memory,
-                          cl->buf->start,
-                          cl->buf->pos,
-                          cl->buf->last,
-                          cl->buf->file,
-                          cl->buf->file_pos,
-                          cl->buf->file_last);
-#endif /* NGX_DEBUG */
-
         if (!ngx_buf_special(cl->buf))
             *pcl = cl->next;
 
@@ -430,6 +413,9 @@ ngx_http_fastcgi_cache_update(ngx_http_request_t *r, ngx_temp_file_t *tf)
     ngx_buf_t                     *b;
     ngx_file_info_t                fi;
     off_t                          len;
+
+    ngx_http_fastcgi_cache_send(r);
+    r->post_action = 1;
 
     ngx_http_fastcgi_cache_create_url(r, &uri, 1);
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
