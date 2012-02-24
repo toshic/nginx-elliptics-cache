@@ -515,7 +515,9 @@ ngx_http_fastcgi_cache_send(ngx_http_request_t *r)
 void
 ngx_http_fastcgi_cache_free(ngx_http_cache_t *c, ngx_temp_file_t *tf)
 {
-    ngx_delete_file(tf->file.name.data);
+    if (tf) {
+        ngx_delete_file(tf->file.name.data);
+    }
     return;
 }
 
