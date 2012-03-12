@@ -1,6 +1,6 @@
 
 /*
- * Copyright (C) Igor Sysoev
+ * Copyright (C) Anton Kortunov
  */
 
 
@@ -12,6 +12,11 @@
 static ngx_str_t  ngx_http_fastcgi_cache_post_method = {4, (u_char *)"POST "};
 static ngx_str_t  ngx_http_fastcgi_cache_content_length_header_key =
         ngx_string("Content-Length");
+
+static ngx_int_t ngx_http_fastcgi_cache_output_filter(void *ctx, ngx_chain_t *in);
+
+
+
 
 void
 ngx_http_fastcgi_cache_drop_output(ngx_http_request_t *r)
@@ -52,6 +57,32 @@ ngx_http_fastcgi_cache_drop_output(ngx_http_request_t *r)
         pcl = &cl->next;
     }
 
+}
+
+static ngx_int_t
+ngx_http_send_fastcgi_special(ngx_http_request_t *r, ngx_uint_t flags, ngx_event_pipe_output_filter_pt output_filter)
+{
+    ngx_buf_t    *b;
+    ngx_chain_t   out;
+
+    b = ngx_calloc_buf(r->pool);
+    if (b == NULL) {
+        return NGX_ERROR;
+    }
+
+    if (flags & NGX_HTTP_LAST) {
+
+        b->last_buf = 1;
+    }
+
+    if (flags & NGX_HTTP_FLUSH) {
+        b->flush = 1;
+    }
+
+    out.buf = b;
+    out.next = NULL;
+
+    return output_filter(r, &out);
 }
 
 #if (NGX_DEBUG)
@@ -110,6 +141,7 @@ ngx_http_fastcgi_cache_subreq_handler(ngx_http_request_t *r, void *data, ngx_int
     ngx_http_request_t            *pr;
     ngx_http_cache_t              *c;
     ngx_http_fastcgi_cache_priv_t *priv;
+    //ngx_http_file_cache_header_t  *h;
 
     pr = r->parent;
 
@@ -121,18 +153,35 @@ ngx_http_fastcgi_cache_subreq_handler(ngx_http_request_t *r, void *data, ngx_int
 #endif /* NGX_DEBUG */
 
     if (r->headers_out.status != NGX_HTTP_OK) {
-        /* Drop buffers related to this subrequest */
-        ngx_http_fastcgi_cache_drop_output(r);
-        priv->state = fastcgi_not_found;
-        return NGX_OK;
+        goto out_exit;
     }
 
-    if (r->upstream) {
+    if (r->upstream && r->upstream->buffer.pos) {
         ngx_log_debug3(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                        "http fastcgi cache len: %d data: \"%s\", status: %d",
                        r->upstream->buffer.last - r->upstream->buffer.pos, r->upstream->buffer.pos, r->headers_out.status);
+
+        if ((unsigned int)(r->upstream->buffer.last - r->upstream->buffer.pos) < sizeof(ngx_http_file_cache_header_t)) {
+            ngx_log_error(NGX_LOG_CRIT, r->connection->log, 0,
+                          "http fastcgi cache: file it soo small: %d bytes", r->upstream->buffer.last - r->upstream->buffer.pos);
+            goto out_exit;
+        }
+
+/*
+        h = (ngx_http_file_cache_header_t *)r->upstream->buffer.pos;
+        c->header_start = h->header_start;
+        c->body_start = h->body_start;
+	//c->buf = &r->upstream->buffer;
+        priv->state = fastcgi_read_data;
+        return NGX_OK;
+*/
     }
-    priv->state = fastcgi_read_data;
+    ngx_http_send_fastcgi_special(r, NGX_HTTP_LAST, ngx_http_fastcgi_cache_output_filter);
+    return NGX_OK;
+out_exit:
+    /* Drop buffers related to this subrequest */
+    ngx_http_fastcgi_cache_drop_output(r);
+    priv->state = fastcgi_not_found;
 
     return NGX_OK;
 }
@@ -218,6 +267,112 @@ ngx_http_fastcgi_cache_create_url(ngx_http_request_t *r, ngx_str_t *out, ngx_uin
     p = ngx_copy(p, priv->cache_url.data, priv->cache_url.len);
 }
 
+static ngx_int_t
+ngx_http_fastcgi_cache_output_filter(void *ctx, ngx_chain_t *in)
+{
+    ngx_int_t                      rc = NGX_OK;
+    ngx_http_request_t            *sr = (ngx_http_request_t *)ctx;
+    ngx_http_request_t            *r = sr->parent;
+    ngx_http_cache_t              *c;
+    ngx_http_fastcgi_cache_priv_t *priv;
+    ngx_http_file_cache_header_t  *h;
+
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, sr->connection->log, 0,
+                   "http fastcgi cache output filter");
+
+    if (!r) {
+        ngx_log_error(NGX_LOG_CRIT, sr->connection->log, 0,
+                      "http fastcgi cache output filter is called not for subrequest");
+        return NGX_ERROR;
+    }
+
+    c = r->cache;
+    if (!c) {
+        ngx_log_error(NGX_LOG_CRIT, sr->connection->log, 0,
+                      "http fastcgi cache output filter is called for subrequest without cache in parent");
+        return NGX_ERROR;
+    }
+
+    priv = c->cache_priv;
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, sr->connection->log, 0,
+                   "http fastcgi cache output filter: state:%d", priv->state);
+
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, sr->connection->log, 0,
+                   "http fastcgi cache output filter: request status :%d", sr->headers_out.status);
+
+    if (sr->headers_out.status != NGX_HTTP_OK) {
+        priv->state = fastcgi_not_found;
+        return NGX_OK;
+    }
+
+    if (priv->state == fastcgi_send_data) {
+        if (priv->in) {
+            rc = ngx_http_output_filter(r, priv->in);
+            if (rc != NGX_OK) {
+                return rc;
+            }
+            priv->in = NULL;
+        }
+        rc = ngx_http_output_filter(r, in);
+        return rc;
+    }
+
+    if (priv->state <= fastcgi_read_data) {
+        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                       "http fastcgi cache copying data to temp chain");
+
+        if (ngx_chain_add_copy(r->pool, &priv->in, in) != NGX_OK) {
+            return NGX_ERROR;
+        }
+
+        //if (priv->in && !c->buf) {
+        //    c->buf = priv->in->buf;
+            //priv->in = priv->in->next;
+        //}
+    }
+
+    if (priv->state == fastcgi_read_header) {
+        if ((ngx_buf_size(priv->in->buf) < sizeof(ngx_http_file_cache_header_t)) || !ngx_buf_in_memory(priv->in->buf)) {
+	    ngx_log_error(NGX_LOG_CRIT, sr->connection->log, 0,
+			  "http fastcgi cache output filter input buffer size is less than cache header size");
+            priv->state = fastcgi_not_found;
+	    return NGX_OK;
+        }
+	h = (ngx_http_file_cache_header_t *)priv->in->buf->pos;
+	c->header_start = h->header_start;
+	c->body_start = h->body_start;
+	priv->state = fastcgi_read_header_content;
+
+	c->buf = ngx_create_temp_buf(r->pool, c->body_start);
+	if (c->buf == NULL) {
+	    return NGX_ERROR;
+	}
+    }
+
+    if (priv->state == fastcgi_read_header_content) {
+        size_t size;
+
+        while (ngx_buf_size(c->buf) < c->body_start) {
+            size = ngx_min(ngx_buf_size(priv->in->buf), c->buf->end - c->buf->last);
+            c->buf->last = ngx_cpymem(c->buf->last, in->buf->pos, size);
+
+            if (size == ngx_buf_size(priv->in->buf)) {
+                priv->in = priv->in->next;
+            } else {
+                in->buf->pos += size;
+            }
+        }
+
+        if (ngx_buf_size(c->buf) == c->body_start) {
+            priv->state = fastcgi_read_data;
+        }
+    }
+
+    return rc;
+}
+
 void
 ngx_http_fastcgi_cache_init(ngx_http_cache_t *c, ngx_http_upstream_t *u){
     return;
@@ -250,6 +405,9 @@ ngx_http_fastcgi_cache_new(ngx_http_request_t *r)
 
     priv = c->cache_priv;
     priv->state = fastcgi_emit_subrequest;
+
+    c->output_filter = ngx_http_fastcgi_cache_output_filter;
+    c->output_ctx = r;
 
     return NGX_OK;
 }
@@ -303,6 +461,8 @@ ngx_http_fastcgi_cache_create_key(ngx_http_request_t *r)
 
     priv->cache_url.len = len;
 
+    c->header_start = sizeof(ngx_http_file_cache_header_t);
+
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "http fastcgi cache url : \"%V\"",
                    &priv->cache_url);
@@ -327,6 +487,7 @@ ngx_http_fastcgi_cache_open(ngx_http_request_t *r)
                    "http fastcgi cache open: state:%d", priv->state);
 
     if (priv->state == fastcgi_not_found) {
+        c->output_filter = NULL;
         r->main->method = priv->orig_method;
         r->main->method_name = priv->orig_method_name;
         ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -364,7 +525,7 @@ ngx_http_fastcgi_cache_open(ngx_http_request_t *r)
     }
 
     if (priv->state == fastcgi_read_data) {
-        c->header_start = c->body_start;
+        //c->header_start = c->body_start;
         rc = NGX_OK;
     }
 
@@ -374,6 +535,37 @@ ngx_http_fastcgi_cache_open(ngx_http_request_t *r)
 void
 ngx_http_fastcgi_cache_set_header(ngx_http_request_t *r, u_char *buf)
 {
+    ngx_http_file_cache_header_t  *h = (ngx_http_file_cache_header_t *) buf;
+
+    u_char            *p;
+    //ngx_str_t         *key;
+    //ngx_uint_t         i;
+    ngx_http_cache_t  *c;
+
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "http file cache set header");
+
+    c = r->cache;
+
+    h->valid_sec = c->valid_sec;
+    h->last_modified = c->last_modified;
+    h->date = c->date;
+    h->crc32 = c->crc32;
+    h->valid_msec = (u_short) c->valid_msec;
+    h->header_start = (u_short) c->header_start;
+    h->body_start = (u_short) c->body_start;
+
+    p = buf + sizeof(ngx_http_file_cache_header_t);
+
+    /*p = ngx_cpymem(p, ngx_http_file_cache_key, sizeof(ngx_http_file_cache_key));
+
+    key = c->keys.elts;
+    for (i = 0; i < c->keys.nelts; i++) {
+        p = ngx_copy(p, key[i].data, key[i].len);
+    }
+
+    *p = LF;
+    */
     return;
 }
 
@@ -414,7 +606,8 @@ ngx_http_fastcgi_cache_update(ngx_http_request_t *r, ngx_temp_file_t *tf)
     ngx_file_info_t                fi;
     off_t                          len;
 
-    ngx_http_fastcgi_cache_send(r);
+    //ngx_http_fastcgi_cache_send(r);
+    ngx_http_send_special(r, NGX_HTTP_LAST);
     r->post_action = 1;
 
     ngx_http_fastcgi_cache_create_url(r, &uri, 1);
@@ -483,8 +676,32 @@ ngx_http_fastcgi_cache_update(ngx_http_request_t *r, ngx_temp_file_t *tf)
 ngx_int_t
 ngx_http_fastcgi_cache_send(ngx_http_request_t *r)
 {
-    ngx_chain_t                    out;
+    //ngx_chain_t        out;
+    ngx_http_cache_t  *c;
+    ngx_int_t          rc = NGX_OK;
+    ngx_http_fastcgi_cache_priv_t *priv;
 
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "http fastcgi cache send");
+
+    c = r->cache;
+    priv = c->cache_priv;
+    r->header_only = (c->length - c->body_start) == 0;
+
+    rc = ngx_http_send_header(r);
+
+    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
+        return rc;
+    }
+
+    //if (priv->in) {
+    //    priv->in->buf->pos += c->body_start;
+    //}
+    rc = ngx_http_output_filter(r, priv->in);
+    priv->in = NULL;
+    priv->state = fastcgi_send_data;
+    //ngx_http_send_special(r, NGX_HTTP_LAST);
+/*
     out.buf = ngx_calloc_buf(r->pool);
     if (out.buf == NULL) {
         return NGX_ERROR;
@@ -495,7 +712,8 @@ ngx_http_fastcgi_cache_send(ngx_http_request_t *r)
 
     out.next = NULL;
     ngx_http_output_filter(r, &out);
-    return NGX_OK;
+*/
+    return rc;
 }
 
 void

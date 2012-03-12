@@ -57,6 +57,9 @@ struct ngx_http_cache_s {
 
     ngx_buf_t                       *buf;
 
+    ngx_event_pipe_output_filter_pt  output_filter;
+    void                            *output_ctx;
+
     void                            *cache_priv;
 
     unsigned                         updated:1;

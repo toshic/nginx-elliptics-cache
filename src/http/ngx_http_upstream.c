@@ -2200,8 +2200,16 @@ ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upstream_t *u)
 
     p = u->pipe;
 
-    p->output_filter = (ngx_event_pipe_output_filter_pt) ngx_http_output_filter;
-    p->output_ctx = r;
+#if (NGX_HTTP_CACHE)
+    if (r->parent && r->parent->cache && r->parent->cache->output_filter) {
+        p->output_filter = r->parent->cache->output_filter;
+        p->output_ctx = r;
+    } else 
+#endif
+    {
+        p->output_filter = (ngx_event_pipe_output_filter_pt) ngx_http_output_filter;
+        p->output_ctx = r;
+    }
     p->tag = u->output.tag;
     p->bufs = u->conf->bufs;
     p->busy_size = u->conf->busy_buffers_size;
@@ -2375,7 +2383,14 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
         if (do_write) {
 
             if (u->out_bufs || u->busy_bufs) {
-                rc = ngx_http_output_filter(r, u->out_bufs);
+#if (NGX_HTTP_CACHE)
+                if (r->parent && r->parent->cache && r->parent->cache->output_filter) {
+                    rc = r->parent->cache->output_filter(r, u->out_bufs);
+                } else 
+#endif
+                {
+                    rc = ngx_http_output_filter(r, u->out_bufs);
+                }
 
                 if (rc == NGX_ERROR) {
                     ngx_http_upstream_finalize_request(r, u, 0);

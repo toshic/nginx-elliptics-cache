@@ -18,7 +18,9 @@
 enum ngx_http_fastcgi_cache_state {
     fastcgi_emit_subrequest = 0,
     fastcgi_read_header,
+    fastcgi_read_header_content,
     fastcgi_read_data,
+    fastcgi_send_data,
     fastcgi_not_found
 };
 
@@ -27,6 +29,7 @@ typedef struct {
     ngx_str_t                   cache_url;
     ngx_uint_t                  orig_method;
     ngx_str_t                   orig_method_name;
+    ngx_chain_t                 *in;
 } ngx_http_fastcgi_cache_priv_t;
 
 typedef struct {
