@@ -270,6 +270,7 @@ ngx_http_fastcgi_cache_create_url(ngx_http_request_t *r, ngx_str_t *out, ngx_uin
 static ngx_int_t
 ngx_http_fastcgi_cache_output_filter(void *ctx, ngx_chain_t *in)
 {
+    time_t                         now;
     ngx_int_t                      rc = NGX_OK;
     ngx_http_request_t            *sr = (ngx_http_request_t *)ctx;
     ngx_http_request_t            *r = sr->parent;
@@ -334,21 +335,33 @@ ngx_http_fastcgi_cache_output_filter(void *ctx, ngx_chain_t *in)
     }
 
     if (priv->state == fastcgi_read_header) {
+        c->output_ctx = sr;
         if ((ngx_buf_size(priv->in->buf) < sizeof(ngx_http_file_cache_header_t)) || !ngx_buf_in_memory(priv->in->buf)) {
 	    ngx_log_error(NGX_LOG_CRIT, sr->connection->log, 0,
 			  "http fastcgi cache output filter input buffer size is less than cache header size");
             priv->state = fastcgi_not_found;
 	    return NGX_OK;
         }
-	h = (ngx_http_file_cache_header_t *)priv->in->buf->pos;
-	c->header_start = h->header_start;
-	c->body_start = h->body_start;
-	priv->state = fastcgi_read_header_content;
+        h = (ngx_http_file_cache_header_t *)priv->in->buf->pos;
+        c->header_start = h->header_start;
+        c->body_start = h->body_start;
+        c->valid_sec = h->valid_sec;
+        c->valid_msec = h->valid_msec;
+        c->last_modified = h->last_modified;
+        c->date = h->date;
 
-	c->buf = ngx_create_temp_buf(r->pool, c->body_start);
-	if (c->buf == NULL) {
-	    return NGX_ERROR;
-	}
+        r->cached = 1;
+        priv->state = fastcgi_read_header_content;
+
+        now = ngx_time();
+        if (c->valid_sec < now) {
+            priv->state = fastcgi_expired;
+        } else {
+            c->buf = ngx_create_temp_buf(r->pool, c->body_start);
+            if (c->buf == NULL) {
+                return NGX_ERROR;
+            }
+        }
     }
 
     if (priv->state == fastcgi_read_header_content) {
@@ -493,6 +506,17 @@ ngx_http_fastcgi_cache_open(ngx_http_request_t *r)
         ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                        "http fastcgi cache status: %d", NGX_DECLINED);
         return NGX_DECLINED;
+    }
+
+    if (priv->state == fastcgi_expired) {
+        if (u->buffering)
+            c->output_filter = NULL;
+        r->main->method = priv->orig_method;
+        r->main->method_name = priv->orig_method_name;
+        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                       "http fastcgi cache expired: %i %T %T", 
+			NGX_HTTP_CACHE_STALE, c->valid_sec, ngx_time());
+        return NGX_HTTP_CACHE_STALE;
     }
 
     if (priv->state == fastcgi_emit_subrequest) {

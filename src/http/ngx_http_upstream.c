@@ -2384,7 +2384,7 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
 
             if (u->out_bufs || u->busy_bufs) {
 #if (NGX_HTTP_CACHE)
-                if (r->parent && r->parent->cache && r->parent->cache->output_filter) {
+                if (r->parent && r->parent->cache && r->parent->cache->output_filter && r->parent->cache->output_ctx == r) {
                     rc = r->parent->cache->output_filter(r, u->out_bufs);
                 } else 
 #endif

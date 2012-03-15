@@ -21,7 +21,8 @@ enum ngx_http_fastcgi_cache_state {
     fastcgi_read_header_content,
     fastcgi_read_data,
     fastcgi_send_data,
-    fastcgi_not_found
+    fastcgi_not_found,
+    fastcgi_expired
 };
 
 typedef struct {
