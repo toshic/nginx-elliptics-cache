@@ -336,7 +336,7 @@ ngx_http_fastcgi_cache_output_filter(void *ctx, ngx_chain_t *in)
 
     if (priv->state == fastcgi_read_header) {
         c->output_ctx = sr;
-        if ((ngx_buf_size(priv->in->buf) < sizeof(ngx_http_file_cache_header_t)) || !ngx_buf_in_memory(priv->in->buf)) {
+        if ((ngx_buf_size(priv->in->buf) < (off_t)sizeof(ngx_http_file_cache_header_t)) || !ngx_buf_in_memory(priv->in->buf)) {
 	    ngx_log_error(NGX_LOG_CRIT, sr->connection->log, 0,
 			  "http fastcgi cache output filter input buffer size is less than cache header size");
             priv->state = fastcgi_not_found;
@@ -367,18 +367,18 @@ ngx_http_fastcgi_cache_output_filter(void *ctx, ngx_chain_t *in)
     if (priv->state == fastcgi_read_header_content) {
         size_t size;
 
-        while (ngx_buf_size(c->buf) < c->body_start) {
+        while ((size_t)ngx_buf_size(c->buf) < (c->body_start)) {
             size = ngx_min(ngx_buf_size(priv->in->buf), c->buf->end - c->buf->last);
             c->buf->last = ngx_cpymem(c->buf->last, in->buf->pos, size);
 
-            if (size == ngx_buf_size(priv->in->buf)) {
+            if (size == (size_t)ngx_buf_size(priv->in->buf)) {
                 priv->in = priv->in->next;
             } else {
                 in->buf->pos += size;
             }
         }
 
-        if (ngx_buf_size(c->buf) == c->body_start) {
+        if ((size_t)ngx_buf_size(c->buf) == c->body_start) {
             priv->state = fastcgi_read_data;
         }
     }
