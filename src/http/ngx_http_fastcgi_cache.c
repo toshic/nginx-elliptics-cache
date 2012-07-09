@@ -279,7 +279,7 @@ ngx_http_fastcgi_cache_output_filter(void *ctx, ngx_chain_t *in)
     ngx_http_file_cache_header_t  *h;
 
 
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, sr->connection->log, 0,
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, sr->connection->log, 0,
                    "http fastcgi cache output filter");
 
     if (!r) {
@@ -509,11 +509,11 @@ ngx_http_fastcgi_cache_open(ngx_http_request_t *r)
     }
 
     if (priv->state == fastcgi_expired) {
-        if (u->buffering)
+        if (r->upstream->buffering)
             c->output_filter = NULL;
         r->main->method = priv->orig_method;
         r->main->method_name = priv->orig_method_name;
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                        "http fastcgi cache expired: %i %T %T", 
 			NGX_HTTP_CACHE_STALE, c->valid_sec, ngx_time());
         return NGX_HTTP_CACHE_STALE;
@@ -599,7 +599,9 @@ ngx_http_fastcgi_cache_upd_subreq_handler(ngx_http_request_t *r, void *data, ngx
     ngx_http_request_t            *pr;
     ngx_http_cache_t              *c;
     ngx_http_fastcgi_cache_priv_t *priv;
+#if (NGX_DEBUG)
     ngx_str_t                      nil_str = ngx_string("(nil)");
+#endif /* NGX_DEBUG */
 
     pr = r->parent;
 
