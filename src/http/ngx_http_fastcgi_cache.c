@@ -167,15 +167,8 @@ ngx_http_fastcgi_cache_subreq_handler(ngx_http_request_t *r, void *data, ngx_int
             goto out_exit;
         }
 
-/*
-        h = (ngx_http_file_cache_header_t *)r->upstream->buffer.pos;
-        c->header_start = h->header_start;
-        c->body_start = h->body_start;
-	//c->buf = &r->upstream->buffer;
-        priv->state = fastcgi_read_data;
-        return NGX_OK;
-*/
     }
+
     ngx_http_send_fastcgi_special(r, NGX_HTTP_LAST, ngx_http_fastcgi_cache_output_filter);
     return NGX_OK;
 out_exit:
@@ -310,13 +303,13 @@ ngx_http_fastcgi_cache_output_filter(void *ctx, ngx_chain_t *in)
 
     if (priv->state == fastcgi_send_data) {
         if (priv->in) {
-            rc = ngx_http_output_filter(r, priv->in);
+            rc = ngx_http_output_filter(sr, priv->in);
             if (rc != NGX_OK) {
                 return rc;
             }
             priv->in = NULL;
         }
-        rc = ngx_http_output_filter(r, in);
+        rc = ngx_http_output_filter(sr, in);
         return rc;
     }
 
@@ -328,10 +321,8 @@ ngx_http_fastcgi_cache_output_filter(void *ctx, ngx_chain_t *in)
             return NGX_ERROR;
         }
 
-        //if (priv->in && !c->buf) {
-        //    c->buf = priv->in->buf;
-            //priv->in = priv->in->next;
-        //}
+        /* Wake up parent request */
+	r->write_event_handler(r);
     }
 
     if (priv->state == fastcgi_read_header) {
@@ -356,6 +347,9 @@ ngx_http_fastcgi_cache_output_filter(void *ctx, ngx_chain_t *in)
         now = ngx_time();
         if (c->valid_sec < now) {
             priv->state = fastcgi_expired;
+	    ngx_log_error(NGX_LOG_WARN, sr->connection->log, 0,
+			  "http fastcgi cache output filter: expired, finalising request");
+	    ngx_http_finalize_request(sr, 410);
         } else {
             c->buf = ngx_create_temp_buf(r->pool, c->body_start);
             if (c->buf == NULL) {
@@ -369,12 +363,12 @@ ngx_http_fastcgi_cache_output_filter(void *ctx, ngx_chain_t *in)
 
         while ((size_t)ngx_buf_size(c->buf) < (c->body_start)) {
             size = ngx_min(ngx_buf_size(priv->in->buf), c->buf->end - c->buf->last);
-            c->buf->last = ngx_cpymem(c->buf->last, in->buf->pos, size);
+            c->buf->last = ngx_cpymem(c->buf->last, priv->in->buf->pos, size);
 
+            priv->in->buf->pos += size;
             if (size == (size_t)ngx_buf_size(priv->in->buf)) {
                 priv->in = priv->in->next;
             } else {
-                in->buf->pos += size;
             }
         }
 
@@ -549,7 +543,6 @@ ngx_http_fastcgi_cache_open(ngx_http_request_t *r)
     }
 
     if (priv->state == fastcgi_read_data) {
-        //c->header_start = c->body_start;
         rc = NGX_OK;
     }
 
@@ -723,8 +716,8 @@ ngx_http_fastcgi_cache_send(ngx_http_request_t *r)
     //if (priv->in) {
     //    priv->in->buf->pos += c->body_start;
     //}
-    rc = ngx_http_output_filter(r, priv->in);
-    priv->in = NULL;
+    //rc = ngx_http_output_filter(r, priv->in);
+    //priv->in = NULL;
     priv->state = fastcgi_send_data;
     //ngx_http_send_special(r, NGX_HTTP_LAST);
 /*

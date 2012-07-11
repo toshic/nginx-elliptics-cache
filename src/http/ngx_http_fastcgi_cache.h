@@ -17,12 +17,12 @@
 
 enum ngx_http_fastcgi_cache_state {
     fastcgi_emit_subrequest = 0,
-    fastcgi_read_header,
-    fastcgi_read_header_content,
-    fastcgi_read_data,
-    fastcgi_send_data,
-    fastcgi_not_found,
-    fastcgi_expired
+    fastcgi_read_header, //1
+    fastcgi_read_header_content, //2
+    fastcgi_read_data, //3
+    fastcgi_send_data, //4
+    fastcgi_not_found, //5
+    fastcgi_expired //6
 };
 
 typedef struct {
