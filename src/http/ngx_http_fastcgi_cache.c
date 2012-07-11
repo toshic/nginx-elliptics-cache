@@ -169,6 +169,7 @@ ngx_http_fastcgi_cache_subreq_handler(ngx_http_request_t *r, void *data, ngx_int
 
     }
 
+    priv->subreq_finished = 1;
     ngx_http_send_fastcgi_special(r, NGX_HTTP_LAST, ngx_http_fastcgi_cache_output_filter);
     return NGX_OK;
 out_exit:
@@ -718,6 +719,13 @@ ngx_http_fastcgi_cache_send(ngx_http_request_t *r)
     //}
     //rc = ngx_http_output_filter(r, priv->in);
     //priv->in = NULL;
+    if (priv->in && priv->subreq_finished) {
+    rc = ngx_http_output_filter(r, priv->in);
+        if (rc != NGX_OK) {
+            return rc;
+        }
+        priv->in = NULL;
+    }
     priv->state = fastcgi_send_data;
     //ngx_http_send_special(r, NGX_HTTP_LAST);
 /*

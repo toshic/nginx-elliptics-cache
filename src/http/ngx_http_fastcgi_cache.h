@@ -31,6 +31,7 @@ typedef struct {
     ngx_uint_t                  orig_method;
     ngx_str_t                   orig_method_name;
     ngx_chain_t                 *in;
+    ngx_uint_t                  subreq_finished;
 } ngx_http_fastcgi_cache_priv_t;
 
 typedef struct {
