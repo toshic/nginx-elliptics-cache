@@ -208,6 +208,11 @@ ngx_http_image_header_filter(ngx_http_request_t *r)
         return ngx_http_next_header_filter(r);
     }
 
+    if (r->upstream && (r->upstream->cache_status == NGX_HTTP_CACHE_HIT
+                        || r->upstream->cache_status == NGX_HTTP_CACHE_STALE)) {
+        return ngx_http_next_header_filter(r);
+    }
+
     if (r->headers_out.content_type.len
             >= sizeof("multipart/x-mixed-replace") - 1
         && ngx_strncasecmp(r->headers_out.content_type.data,
